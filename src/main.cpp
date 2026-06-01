@@ -102,13 +102,13 @@ struct App {
     Op pendingOp = Op::None;
 
     int mergeSrc = -1, mergeDst = -1;
-    long long mergeSrcValue = 0;
+    Rational mergeSrcValue;
     Vec2 mergeStart{};
     float mergeT = 0;
     bool pendingWin = false;
 
     int rejectSlot = -1;
-    long long rejectValue = 0;
+    Rational rejectValue;
     Vec2 rejectFrom{};
     float rejectT = 0;
     int shakeSlot = -1;
@@ -208,7 +208,7 @@ struct App {
         if (phase != Phase::Dragging) return;
         Vec2 dragged = pointer - grabOffset;
         if (hoverTarget >= 0 && pendingOp != Op::None) {
-            long long oldSrc = game.board().value[dragSrc].toInt();
+            Rational oldSrc = game.board().value[dragSrc];
             int src = dragSrc, dst = hoverTarget;
             Op op = pendingOp;
             ApplyResult res = game.apply(src, dst, op);
@@ -227,7 +227,7 @@ struct App {
         }
         // snap the dragged tile back home
         rejectSlot = dragSrc;
-        rejectValue = game.board().value[dragSrc].toInt();
+        rejectValue = game.board().value[dragSrc];
         rejectFrom = dragged; rejectT = 0;
         phase = Phase::Rejecting;
         dragSrc = -1;
@@ -314,7 +314,26 @@ struct App {
     }
     float tileAlpha(int i) const { return saturate(spawnT[i] * 2.0f); }
 
-    void drawTile(Vec2 center, float scale, long long value, float alpha, float lift, const Color* glow) {
+    // Numerator stacked over denominator with a bar between, scaled to fit the cell.
+    void drawStackedFraction(Vec2 c, float s, Rational v, Color col) {
+        const std::string num = std::to_string(v.num);
+        const std::string den = std::to_string(v.den);
+        float partH = 0.40f * s;
+        Vec2 nm = rdr.measureText(num, partH);
+        Vec2 dm = rdr.measureText(den, partH);
+        float barW = std::max(nm.x, dm.x) + partH * 0.18f;
+        float totalH = partH * 2.3f;
+        float fit = std::min({1.0f, (s * 0.74f) / barW, (s * 0.80f) / totalH});
+        partH *= fit;
+        barW *= fit;
+        float off = partH * 0.62f;
+        float th = std::max(2.0f, partH * 0.11f);
+        rdr.drawText(num, c.x, c.y - off, partH, col);
+        rdr.fillCapsule({c.x - barW * 0.5f, c.y}, {c.x + barW * 0.5f, c.y}, th, col);
+        rdr.drawText(den, c.x, c.y + off, partH, col);
+    }
+
+    void drawTile(Vec2 center, float scale, Rational value, float alpha, float lift, const Color* glow) {
         float s = BOX * scale;
         SDL_FRect rect{center.x - s / 2, center.y - s / 2, s, s};
         float rad = BOX_RAD * scale;
@@ -327,7 +346,16 @@ struct App {
         rdr.fillRoundedRectGrad(rect, rad, withAlpha(BOX_TOP, alpha), withAlpha(BOX_BOT, alpha));
         SDL_FRect gloss{rect.x + 10 * scale, rect.y + 9 * scale, rect.w - 20 * scale, rect.h * 0.40f};
         rdr.fillRoundedRect(gloss, rad * 0.7f, withAlpha(WHITE, 0.42f * alpha));
-        rdr.drawText(std::to_string(value), center.x, center.y, 92 * scale, withAlpha(BOX_TEXT, alpha));
+        if (value.den == 1) {
+            std::string txt = std::to_string(value.num);
+            float px = 92 * scale;
+            Vec2 tm = rdr.measureText(txt, px);
+            float maxw = s * 0.80f;
+            if (tm.x > maxw) px *= maxw / tm.x;  // shrink wide integers (169) to fit
+            rdr.drawText(txt, center.x, center.y, px, withAlpha(BOX_TEXT, alpha));
+        } else {
+            drawStackedFraction(center, s, value, withAlpha(BOX_TEXT, alpha));
+        }
     }
 
     void fillRoundedHalo(SDL_FRect rect, float rad, Color c, float grow, float alpha) {
@@ -461,12 +489,12 @@ struct App {
                 glowCol = opColor(pendingOp);
                 glow = &glowCol;
             }
-            drawTile(c, scale, game.board().value[i].toInt(), tileAlpha(i), 0, glow);
+            drawTile(c, scale, game.board().value[i], tileAlpha(i), 0, glow);
         }
 
         if (phase == Phase::Dragging && dragSrc >= 0) {
             Vec2 c = pointer - grabOffset;
-            drawTile(c, 1.12f, game.board().value[dragSrc].toInt(), 1, 1, nullptr);
+            drawTile(c, 1.12f, game.board().value[dragSrc], 1, 1, nullptr);
         } else if (phase == Phase::Merging) {
             float t = ease::inOutCubic(saturate(mergeT));
             Vec2 c = lerp(mergeStart, slotCenter(mergeDst), t);

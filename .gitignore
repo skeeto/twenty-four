@@ -2,6 +2,9 @@
 /build/
 /build-web/
 
+# gh-pages deploy worktree (its own branch; not part of this tree)
+/gh-pages/
+
 # editor / tooling
 /.claude/
 

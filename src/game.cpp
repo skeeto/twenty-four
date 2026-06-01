@@ -51,9 +51,8 @@ ApplyResult Game::apply(int src, int dst, Op op) {
         case Op::Sub: result = a - b; break;
         case Op::Mul: result = a * b; break;
         case Op::Div:
-            if (b.isZero()) return r;          // no divide by zero
-            result = a / b;
-            if (!result.isInteger()) return r; // reject fractions
+            if (b.isZero()) return r;  // dividing by zero is the only illegal move
+            result = a / b;            // fractions are allowed; a cell may hold e.g. 3/4
             break;
         default: return r;
     }

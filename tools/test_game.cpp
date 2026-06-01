@@ -49,15 +49,22 @@ int main() {
     { Game g = board4(6, 4, 2, 1); auto r = g.apply(0, 1, Op::Sub); CHECK(r.ok && r.result == Rational(2)); }   // dragged 6 - target 4
     { Game g = board4(6, 4, 2, 1); auto r = g.apply(0, 1, Op::Add); CHECK(r.ok && r.result == Rational(10)); }
     { Game g = board4(6, 4, 2, 1); auto r = g.apply(0, 2, Op::Div); CHECK(r.ok && r.result == Rational(3)); }   // dragged 6 / target 2
-    {  // fraction rejected, board unchanged
+    {  // fractions are allowed now: dragged 6 / target 4 = 3/2
         Game g = board4(6, 4, 2, 1);
-        auto r = g.apply(0, 1, Op::Div);  // dragged 6 / target 4
-        CHECK(!r.ok && g.board().count() == 4);
+        auto r = g.apply(0, 1, Op::Div);
+        CHECK(r.ok && r.result == Rational(3, 2) && g.board().count() == 3);
     }
-    {  // divide by zero rejected (target is the divisor)
+    {  // divide by zero is still rejected (target is the divisor)
         Game g = board4(6, 4, 2, 0);
         auto r = g.apply(0, 3, Op::Div);  // dragged 6 / target 0
         CHECK(!r.ok && g.board().count() == 4);
+    }
+    {  // a former fraction-only puzzle is now winnable: 6 / (1 - 3/4) = 24
+        Game g = board4(1, 3, 4, 6);
+        CHECK(g.apply(1, 2, Op::Div).ok);   // 3 / 4
+        CHECK(g.apply(0, 2, Op::Sub).ok);   // 1 - 3/4 = 1/4
+        auto r = g.apply(3, 2, Op::Div);    // 6 / (1/4) = 24
+        CHECK(r.ok && r.won && r.result == Rational(24));
     }
 
     // win detection + score
