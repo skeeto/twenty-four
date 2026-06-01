@@ -23,8 +23,8 @@ Four numbers sit in a 2×2 grid, framed by four operator borders:
 **Drag one number onto another, then flick toward a border to choose the
 operation** — the highlighted border and target show what will happen. Release
 to combine them: the two numbers meld into one and the grid shrinks. The
-dragged tile is the left operand (`dragged ∘ target`), so to compute `a − b`
-drag `a` onto `b` and push down. Fractions and negatives are both fine — a cell
+stationary target is the left operand (`target ∘ dragged`), so to compute `a − b`
+drag `b` onto `a` and push down. Fractions and negatives are both fine — a cell
 can briefly hold something like `3/4` on the way to 24, and only dividing by zero
 is rejected (its own sound + a shake). Reduce all four tiles to
 a single **24** to win — confetti, a jingle, and the score ticks up, then a new

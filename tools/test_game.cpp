@@ -45,25 +45,26 @@ int main() {
         CHECK(g.board().count() == 3 && !g.board().present[0]);
         CHECK(g.board().value[1] == Rational(24));
     }
-    { Game g = board4(6, 4, 2, 1); auto r = g.apply(1, 0, Op::Sub); CHECK(r.ok && r.result == Rational(-2)); }  // dragged 4 - target 6
-    { Game g = board4(6, 4, 2, 1); auto r = g.apply(0, 1, Op::Sub); CHECK(r.ok && r.result == Rational(2)); }   // dragged 6 - target 4
+    // result = target(dst) OP dragged(src)
+    { Game g = board4(6, 4, 2, 1); auto r = g.apply(1, 0, Op::Sub); CHECK(r.ok && r.result == Rational(2)); }   // target 6 - dragged 4
+    { Game g = board4(6, 4, 2, 1); auto r = g.apply(0, 1, Op::Sub); CHECK(r.ok && r.result == Rational(-2)); }  // target 4 - dragged 6 (negatives ok)
     { Game g = board4(6, 4, 2, 1); auto r = g.apply(0, 1, Op::Add); CHECK(r.ok && r.result == Rational(10)); }
-    { Game g = board4(6, 4, 2, 1); auto r = g.apply(0, 2, Op::Div); CHECK(r.ok && r.result == Rational(3)); }   // dragged 6 / target 2
-    {  // fractions are allowed now: dragged 6 / target 4 = 3/2
+    { Game g = board4(6, 4, 2, 1); auto r = g.apply(2, 0, Op::Div); CHECK(r.ok && r.result == Rational(3)); }   // target 6 / dragged 2
+    {  // fractions are allowed: target 4 / dragged 6 = 2/3
         Game g = board4(6, 4, 2, 1);
         auto r = g.apply(0, 1, Op::Div);
-        CHECK(r.ok && r.result == Rational(3, 2) && g.board().count() == 3);
+        CHECK(r.ok && r.result == Rational(2, 3) && g.board().count() == 3);
     }
-    {  // divide by zero is still rejected (target is the divisor)
+    {  // divide by zero is still rejected (the dragged tile is the divisor)
         Game g = board4(6, 4, 2, 0);
-        auto r = g.apply(0, 3, Op::Div);  // dragged 6 / target 0
+        auto r = g.apply(3, 0, Op::Div);  // target 6 / dragged 0
         CHECK(!r.ok && g.board().count() == 4);
     }
-    {  // a former fraction-only puzzle is now winnable: 6 / (1 - 3/4) = 24
+    {  // a former fraction-only puzzle is winnable: 6 / (1 - 3/4) = 24
         Game g = board4(1, 3, 4, 6);
-        CHECK(g.apply(1, 2, Op::Div).ok);   // 3 / 4
-        CHECK(g.apply(0, 2, Op::Sub).ok);   // 1 - 3/4 = 1/4
-        auto r = g.apply(3, 2, Op::Div);    // 6 / (1/4) = 24
+        CHECK(g.apply(2, 1, Op::Div).ok);   // target 3 / dragged 4 = 3/4
+        CHECK(g.apply(1, 0, Op::Sub).ok);   // target 1 - dragged 3/4 = 1/4
+        auto r = g.apply(0, 3, Op::Div);    // target 6 / dragged 1/4 = 24
         CHECK(r.ok && r.won && r.result == Rational(24));
     }
 

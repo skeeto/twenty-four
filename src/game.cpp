@@ -43,8 +43,8 @@ ApplyResult Game::apply(int src, int dst, Op op) {
     if (src < 0 || src > 3 || dst < 0 || dst > 3 || src == dst) return r;
     if (!board_.present[src] || !board_.present[dst]) return r;
 
-    const Rational a = board_.value[src];  // dragged = left operand
-    const Rational b = board_.value[dst];  // stationary target = right operand
+    const Rational a = board_.value[dst];  // stationary target = left operand
+    const Rational b = board_.value[src];  // dragged = right operand
     Rational result;
     switch (op) {
         case Op::Add: result = a + b; break;
