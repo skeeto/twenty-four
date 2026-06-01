@@ -1,9 +1,13 @@
-# 24
+# Twenty Four
 
-A juicy little implementation of the **24 game**: combine four numbers with
-`+`, `−`, `×`, and `÷` to make **24**. Written in C++20 with SDL3, built with
-CMake. The primary target is an Emscripten **PWA**; desktop (macOS/Linux/Windows)
-works too.
+A juicy implementation of the 24 arithmetic puzzle: combine four numbers
+with `+`, `−`, `×`, and `÷` to make **24**. Written in C++20 with SDL3,
+built with CMake. The primary target is an Emscripten Progressive Web App
+(PWA) for mobile; desktop (macOS/Linux/Windows) works too.
+
+[**Play or install Twenty Four online**](https://nullprogram.com/twenty-four)
+
+![](docs/screenshot.png)
 
 ## How to play
 
@@ -16,7 +20,7 @@ Four numbers sit in a 2×2 grid, framed by four operator borders:
         −            (bottom = subtract)
 ```
 
-**Drag one number onto another, then push toward a border to choose the
+**Drag one number onto another, then flick toward a border to choose the
 operation** — the highlighted border and target show what will happen. Release
 to combine them: the two numbers meld into one and the grid shrinks. The
 dragged tile is the left operand (`dragged ∘ target`), so to compute `a − b`
