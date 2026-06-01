@@ -17,6 +17,13 @@ concurrency:
   group: deploy-pages
   cancel-in-progress: true
 
+env:
+  # Pinned so the toolchain (and its caches) are reproducible. Bump to upgrade.
+  EM_VERSION: 5.0.7
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_MAXSIZE: 500M
+  CCACHE_COMPILERCHECK: content  # key on emcc contents, not mtime
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -24,18 +31,46 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # The Emscripten SDK install includes its system-library/port cache, so a
+      # hit skips both the toolchain download and the first-build sysroot work.
+      - name: Cache emsdk
+        uses: actions/cache@v4
+        with:
+          path: emsdk
+          key: emsdk-${{ env.EM_VERSION }}
+
+      # Compiled objects, keyed by content. SDL3 doesn't change between commits,
+      # so its objects are restored from cache instead of recompiled; only our
+      # changed sources actually build.
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CCACHE_DIR }}
+          key: ccache-${{ env.EM_VERSION }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ env.EM_VERSION }}-
+
+      - name: Set up Emscripten
+        run: |
+          set -eux
+          if [ ! -x emsdk/emsdk ]; then
+            git clone --depth 1 https://github.com/emscripten-core/emsdk.git
+          fi
+          ./emsdk/emsdk install "${EM_VERSION}"
+          ./emsdk/emsdk activate "${EM_VERSION}"
+
       - name: Build PWA
         run: |
           set -eux
-          # Install the Emscripten SDK (latest; pin a tag here for reproducibility).
-          git clone --depth 1 https://github.com/emscripten-core/emsdk.git
-          ./emsdk/emsdk install latest
-          ./emsdk/emsdk activate latest
           source ./emsdk/emsdk_env.sh
-          # Configure, build, and stage just the PWA files into dist/.
-          emcmake cmake -B build-web -DCMAKE_BUILD_TYPE=MinSizeRel
+          ccache --zero-stats
+          # ccache fronts both compilers (SDL3 is C, our code is C++).
+          emcmake cmake -B build-web -DCMAKE_BUILD_TYPE=MinSizeRel \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           cmake --build build-web -j"$(nproc)"
           cmake --install build-web --prefix dist
+          ccache --show-stats   # surfaces the hit rate in the log
 
       - name: Publish to gh-pages
         if: github.ref == 'refs/heads/master'
