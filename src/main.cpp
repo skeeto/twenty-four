@@ -17,6 +17,13 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <emscripten/html5.h>
+#else
+#include "icon_generated.h"  // embedded window-icon PNG bytes
+#include "stb_image.h"
+#endif
+
+#ifndef TF_VERSION
+#define TF_VERSION "1.0.0"
 #endif
 
 using namespace tf;
@@ -534,7 +541,24 @@ static EM_BOOL onCanvasResize(int, const EmscriptenUiEvent*, void* ud) {
 }
 #endif
 
+#ifndef __EMSCRIPTEN__
+// Decode the embedded PNG and set it as the window/taskbar icon (desktop only;
+// the web build uses the page favicon instead).
+static void setWindowIcon(SDL_Window* win) {
+    int w = 0, h = 0, ch = 0;
+    unsigned char* px = stbi_load_from_memory(kIconData, (int)kIconData_len, &w, &h, &ch, 4);
+    if (!px) return;
+    SDL_Surface* surf = SDL_CreateSurfaceFrom(w, h, SDL_PIXELFORMAT_RGBA32, px, w * 4);
+    if (surf) {
+        SDL_SetWindowIcon(win, surf);
+        SDL_DestroySurface(surf);
+    }
+    stbi_image_free(px);
+}
+#endif
+
 SDL_AppResult SDL_AppInit(void** appstate, int, char**) {
+    SDL_SetAppMetadata("Twenty Four", TF_VERSION, "com.nullprogram.twentyfour");
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO)) {
         SDL_Log("SDL_Init: %s", SDL_GetError());
         return SDL_APP_FAILURE;
@@ -548,6 +572,9 @@ SDL_AppResult SDL_AppInit(void** appstate, int, char**) {
         SDL_Log("CreateWindowAndRenderer: %s", SDL_GetError());
         return SDL_APP_FAILURE;
     }
+#ifndef __EMSCRIPTEN__
+    setWindowIcon(app->win);
+#endif
     SDL_SetRenderVSync(app->ren, 1);
     SDL_SetRenderLogicalPresentation(app->ren, (int)LW, (int)LH, SDL_LOGICAL_PRESENTATION_LETTERBOX);
 

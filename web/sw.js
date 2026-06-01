@@ -1,11 +1,12 @@
 // Minimal offline-first service worker for the 24 PWA.
-const CACHE = 'twenty-four-v2';
+const CACHE = 'twenty-four-v3';
 const ASSETS = [
   './',
   'index.html',
   'index.js',
   'index.wasm',
   'manifest.webmanifest',
+  'favicon.ico',
   'icon-192.png',
   'icon-512.png',
   'icon.svg',

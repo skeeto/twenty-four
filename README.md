@@ -80,12 +80,30 @@ no in-app solution display. `tools/test_game.cpp` unit-tests the game model
 |------|---------|
 | `src/` | game model, rendering, procedural audio, storage, app/input |
 | `tools/test_game.cpp` | game-model unit tests |
-| `web/` | PWA shell, manifest, service worker, icons |
+| `web/` | PWA shell, manifest, service worker, favicon, icons |
 | `assets/font.ttf` | embedded display font (Titan One, OFL) |
-| `cmake/EmbedFile.cmake` | turns the font into a C++ byte array |
+| `assets/icon.{png,ico,icns}` | app icons (window, Windows EXE, macOS bundle) |
+| `cmake/EmbedFile.cmake` | turns the font/icon into a C++ byte array |
+| `cmake/app.rc.in` | Windows EXE icon + version/file properties |
+
+## Icons and metadata
+
+All icons derive from `web/icon.svg`. Regenerate the platform assets
+(`assets/icon.{png,ico,icns}`, `web/favicon.ico`) with:
+
+```sh
+sh tools/make_app_icons.sh   # needs rsvg-convert, iconutil (macOS), python3
+```
+
+The version lives in one place — `project(... VERSION)` in `CMakeLists.txt` — and
+flows to the `TF_VERSION` define, `SDL_SetAppMetadata`, the Windows `VERSIONINFO`
+resource, and the macOS `Info.plist`. Desktop builds embed a PNG window icon
+(decoded by `stb_image` at startup); Windows builds as a GUI app with an EXE icon
+and file properties; macOS produces a `Twenty Four.app` bundle; the web build uses
+a favicon.
 
 ## License
 
 The project is released into the public domain (see `UNLICENSE`). The bundled
 font, Titan One, is licensed under the SIL Open Font License (see
-`assets/font-OFL.txt`); `stb_truetype.h` is public domain.
+`assets/font-OFL.txt`); `stb_truetype.h` and `stb_image.h` are public domain.
