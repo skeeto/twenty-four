@@ -98,7 +98,7 @@ struct App {
     Phase phase = Phase::Idle;
 
     Vec2 pointer{}, grabOffset{}, dragDir{};
-    int dragSrc = -1, hoverTarget = -1;
+    int dragSrc = -1, hoverTarget = -1, lastTarget = -1;
     Op pendingOp = Op::None;
 
     int mergeSrc = -1, mergeDst = -1;
@@ -154,11 +154,12 @@ struct App {
     }
 
     void updateHover() {
-        hoverTarget = -1;
-        pendingOp = Op::None;
         int t = tileUnder(pointer);
-        if (t < 0 || t == dragSrc) return;
-        hoverTarget = t;
+        if (t == dragSrc) t = -1;
+        if (t >= 0) lastTarget = t;               // remember the last cell we were actually over
+        hoverTarget = (t >= 0) ? t : lastTarget;  // forgiving: keep it if the flick ends in the border
+        pendingOp = Op::None;
+        if (hoverTarget < 0) return;
         // The operator is chosen by the direction the user is dragging toward
         // (the border they're heading for), not by where in the cell they land.
         if (length(dragDir) < 0.8f) return;
@@ -188,6 +189,7 @@ struct App {
             dragSrc = t;
             grabOffset = p - slotCenter(t);
             dragDir = {0, 0};
+            lastTarget = -1;
             phase = Phase::Dragging;
             audio.play(Sound::Pickup);
             updateHover();
