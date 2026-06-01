@@ -1,0 +1,9 @@
+# build trees
+/build/
+/build-web/
+
+# editor / tooling
+/.claude/
+
+# os cruft
+.DS_Store
