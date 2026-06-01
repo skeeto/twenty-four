@@ -20,8 +20,6 @@ concurrency:
 env:
   # Pinned so the toolchain (and its caches) are reproducible. Bump to upgrade.
   EM_VERSION: 5.0.7
-  CCACHE_DIR: ${{ github.workspace }}/.ccache
-  CCACHE_MAXSIZE: 500M
   CCACHE_COMPILERCHECK: content  # key on emcc contents, not mtime
 
 jobs:
@@ -39,16 +37,14 @@ jobs:
           path: emsdk
           key: emsdk-${{ env.EM_VERSION }}
 
-      # Compiled objects, keyed by content. SDL3 doesn't change between commits,
-      # so its objects are restored from cache instead of recompiled; only our
-      # changed sources actually build.
-      - name: Cache ccache
-        uses: actions/cache@v4
+      # Installs ccache and manages its cache. Compiled objects are keyed by
+      # content, so SDL3 (unchanged between commits) is restored from cache
+      # instead of recompiled; only changed sources actually build.
+      - name: Set up ccache
+        uses: hendrikmuhs/ccache-action@v1.2
         with:
-          path: ${{ env.CCACHE_DIR }}
-          key: ccache-${{ env.EM_VERSION }}-${{ github.sha }}
-          restore-keys: |
-            ccache-${{ env.EM_VERSION }}-
+          key: ccache-${{ env.EM_VERSION }}
+          max-size: 500M
 
       - name: Set up Emscripten
         run: |
