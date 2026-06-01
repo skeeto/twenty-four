@@ -1,5 +1,5 @@
 #include "game.hpp"
-#include "puzzles_generated.h"
+#include "puzzles.h"
 
 #include <algorithm>
 #include <sstream>

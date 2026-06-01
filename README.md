@@ -69,22 +69,17 @@ icons — installable and playable offline.
 
 ## Puzzles
 
-`solutions.txt` holds every puzzle and one-or-more solutions. At build time
-`tools/verify_solutions.py` checks each solution with exact rational arithmetic
-(must equal 24 using each number once) and emits the embedded puzzle table
-(`puzzles_generated.h`); a bad solution fails the build. Only the puzzles are
-embedded — the app has no solution UI. Run it standalone with:
-
-```sh
-python3 tools/verify_solutions.py solutions.txt
-```
+The 1362 puzzles are baked into `src/puzzles.h` as a `kPuzzles[N][4]` table —
+each row is one puzzle's four numbers. The app embeds only the puzzles; there is
+no in-app solution display. `tools/test_game.cpp` unit-tests the game model
+(operations, fraction and ÷0 handling, undo, win detection, grab bag, save/restore).
 
 ## Layout
 
 | path | purpose |
 |------|---------|
 | `src/` | game model, rendering, procedural audio, storage, app/input |
-| `tools/verify_solutions.py` | solution verifier + puzzle-table generator |
+| `tools/test_game.cpp` | game-model unit tests |
 | `web/` | PWA shell, manifest, service worker, icons |
 | `assets/font.ttf` | embedded display font (Titan One, OFL) |
 | `cmake/EmbedFile.cmake` | turns the font into a C++ byte array |

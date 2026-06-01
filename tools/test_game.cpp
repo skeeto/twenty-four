@@ -1,7 +1,7 @@
 // Standalone unit tests for the game model (no SDL). Build:
-//   c++ -std=c++20 -I src -I build/generated tools/test_game.cpp src/game.cpp -o /tmp/test_game
+//   c++ -std=c++20 -I src tools/test_game.cpp src/game.cpp -o /tmp/test_game
 #include "game.hpp"
-#include "puzzles_generated.h"
+#include "puzzles.h"
 
 #include <cstdio>
 #include <set>

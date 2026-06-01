@@ -9,8 +9,6 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE Release CACHE STRING "" FORCE)
 endif()
 
-find_package(Python3 COMPONENTS Interpreter REQUIRED)
-
 # ---------------------------------------------------------------------------
 # Dependency: SDL3, fetched over HTTPS with a pinned SHA256, statically linked.
 # Text is rendered with the vendored single-header stb_truetype (src/), which
@@ -39,23 +37,11 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# Generated sources: verified puzzle table + embedded font.
+# Generated source: the font embedded as a byte array. (The puzzle table is a
+# committed header, src/puzzles.h.)
 # ---------------------------------------------------------------------------
 set(GEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${GEN_DIR})
-
-set(PUZZLES_HEADER ${GEN_DIR}/puzzles_generated.h)
-add_custom_command(
-    OUTPUT ${PUZZLES_HEADER}
-    COMMAND ${Python3_EXECUTABLE}
-            ${CMAKE_CURRENT_SOURCE_DIR}/tools/verify_solutions.py
-            ${CMAKE_CURRENT_SOURCE_DIR}/solutions.txt
-            --header ${PUZZLES_HEADER}
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/solutions.txt
-            ${CMAKE_CURRENT_SOURCE_DIR}/tools/verify_solutions.py
-    COMMENT "Verifying solutions.txt and generating puzzles_generated.h"
-    VERBATIM
-)
 
 set(FONT_HEADER ${GEN_DIR}/font_generated.h)
 add_custom_command(
@@ -81,7 +67,6 @@ add_executable(twenty_four
     src/audio.cpp
     src/storage.cpp
     src/stb_impl.cpp
-    ${PUZZLES_HEADER}
     ${FONT_HEADER}
 )
 target_include_directories(twenty_four PRIVATE ${GEN_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/src)
