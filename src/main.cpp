@@ -180,8 +180,11 @@ struct App {
         CursorKind k = CursorKind::Default;
         if (phase == Phase::Dragging) {
             k = CursorKind::Grab;
-        } else if (phase == Phase::Idle && (tileUnder(pointer) >= 0 ||
-                                            (overUndo(pointer) && game.canUndo()))) {
+        } else if (tileUnder(pointer) >= 0 || (overUndo(pointer) && game.canUndo())) {
+            // Not gated on the Idle phase: tileUnder() reflects the post-animation
+            // board, so what's under the pointer during a merge/reject/celebrate
+            // settle is exactly what becomes grabbable the moment it ends. Keeping
+            // the hand here avoids an arrow flicker between animation and Idle.
             k = CursorKind::Hover;
         }
         setCursor(k);
