@@ -17,6 +17,11 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <emscripten/html5.h>
+// Web: drive the canvas CSS cursor so we get true open/closed-hand "grab".
+EM_JS(void, tf_set_cursor, (const char* css), {
+    var c = Module['canvas'];
+    if (c) c.style.cursor = UTF8ToString(css);
+});
 #else
 #include "icon_generated.h"  // embedded window-icon PNG bytes
 #include "stb_image.h"
@@ -133,8 +138,54 @@ struct App {
     Uint64 lastTick = 0;
     bool audioUnlocked = false;
 
+    // Mouse cursor affordance: plain arrow, hand over a grabbable cell/button,
+    // closed/grabbing hand while dragging. (Touch shows no cursor, so this is
+    // a no-op there.)
+    enum class CursorKind { Default, Hover, Grab };
+    CursorKind cursorKind = CursorKind::Default;
+#ifndef __EMSCRIPTEN__
+    SDL_Cursor* cursors[3] = {nullptr, nullptr, nullptr};
+#endif
+
     // --- helpers ---------------------------------------------------------
     void save() { storage::save(game.serialize()); }
+
+    void initCursors() {
+#ifndef __EMSCRIPTEN__
+        cursors[(int)CursorKind::Default] = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_DEFAULT);
+        cursors[(int)CursorKind::Hover]   = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
+        cursors[(int)CursorKind::Grab]    = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_MOVE);
+#endif
+    }
+    void destroyCursors() {
+#ifndef __EMSCRIPTEN__
+        for (SDL_Cursor* c : cursors)
+            if (c) SDL_DestroyCursor(c);
+#endif
+    }
+    void setCursor(CursorKind k) {
+        if (k == cursorKind) return;
+        cursorKind = k;
+#ifdef __EMSCRIPTEN__
+        tf_set_cursor(k == CursorKind::Grab ? "grabbing"
+                    : k == CursorKind::Hover ? "grab"
+                                             : "default");
+#else
+        if (cursors[(int)k]) SDL_SetCursor(cursors[(int)k]);
+#endif
+    }
+
+    // Choose the cursor from the current interaction state. Called each frame.
+    void updateCursor() {
+        CursorKind k = CursorKind::Default;
+        if (phase == Phase::Dragging) {
+            k = CursorKind::Grab;
+        } else if (phase == Phase::Idle && (tileUnder(pointer) >= 0 ||
+                                            (overUndo(pointer) && game.canUndo()))) {
+            k = CursorKind::Hover;
+        }
+        setCursor(k);
+    }
 
     void resetSpawn() {
         for (int i = 0; i < 4; ++i) {
@@ -585,6 +636,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int, char**) {
 
     if (!app->rdr.init(app->ren)) return SDL_APP_FAILURE;
     app->audio.init();
+    app->initCursors();
 
     std::string saved = storage::load();
     if (!saved.empty() && app->game.deserialize(saved))
@@ -605,6 +657,7 @@ SDL_AppResult SDL_AppIterate(void* appstate) {
     if (dt > 0.05f) dt = 0.05f;
 
     app->update(dt);
+    app->updateCursor();
     app->draw();
     SDL_RenderPresent(app->ren);
     return SDL_APP_CONTINUE;
@@ -648,6 +701,7 @@ void SDL_AppQuit(void* appstate, SDL_AppResult) {
         app->save();
         app->audio.shutdown();
         app->rdr.shutdown();
+        app->destroyCursors();
         delete app;
     }
 }
