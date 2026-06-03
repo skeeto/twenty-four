@@ -9,6 +9,10 @@ namespace tf {
 namespace storage {
 void save(const std::string& data);
 std::string load();  // returns "" when nothing is stored
+
+// A tiny separate flag, used for one-time UI state like "tutorial seen".
+void saveFlag(const char* key, bool value);
+bool loadFlag(const char* key);  // false when unset
 }  // namespace storage
 
 }  // namespace tf

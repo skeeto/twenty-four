@@ -22,9 +22,21 @@ EM_JS(void, tf_set_cursor, (const char* css), {
     var c = Module['canvas'];
     if (c) c.style.cursor = UTF8ToString(css);
 });
+// Web: short haptic buzz on phones (no-op where unsupported). Values are a
+// navigator.vibrate pattern in ms; zeros are dropped.
+EM_JS(void, tf_vibrate, (int a, int b, int c), {
+    try {
+        if (navigator.vibrate) {
+            var pat = [a, b, c].filter(function (x) { return x > 0; });
+            if (pat.length) navigator.vibrate(pat);
+        }
+    } catch (e) {}
+});
+static inline void haptic(int a, int b = 0, int c = 0) { tf_vibrate(a, b, c); }
 #else
 #include "icon_generated.h"  // embedded window-icon PNG bytes
 #include "stb_image.h"
+static inline void haptic(int = 0, int = 0, int = 0) {}  // desktop: no haptics
 #endif
 
 #ifndef TF_VERSION
@@ -44,9 +56,11 @@ constexpr float BOX = 176, BOX_RAD = 30;
 
 constexpr float MERGE_DUR = 0.18f, REJECT_DUR = 0.24f, CELEBRATE_DUR = 1.6f;
 constexpr float POP_DUR = 0.4f, SPAWN_DUR = 0.45f;
+constexpr float kHintLoop = 3.2f;  // one full demo gesture, then pause + repeat
 
 constexpr Vec2 kUndoCenter{LW - 62.0f, 46.0f};  // top-right: easy to reach with a right thumb
 constexpr Vec2 kScoreCenter{64.0f, 46.0f};      // top-left
+constexpr Vec2 kHelpCenter{LW - 40.0f, LH - 36.0f};  // bottom-right: replay the hint
 
 Vec2 slotCenter(int i) {
     int col = i % 2, row = i / 2;
@@ -135,8 +149,29 @@ struct App {
     std::vector<Confetti> confetti;
 
     float undoPressT = 1;
+    float stuckT = 0;  // ramps up while the board is a dead end (1 tile != 24)
+    float clock = 0;   // free-running seconds, for idle pulses/hint animation
     Uint64 lastTick = 0;
     bool audioUnlocked = false;
+
+    // First-run hint: a looping ghost gesture that teaches drag -> flick. Shown
+    // until the player's first successful merge, then replayable via a ? button.
+    bool hintActive = false;
+    float hintT = 0;      // loop phase in seconds
+    float hintFade = 0;   // 0..1 visibility, eased
+
+    // Dead end: a single tile remains and it isn't 24, so no move is possible
+    // (a drag needs two tiles). The player must undo or wait for a new puzzle.
+    bool isStuck() const {
+        const Board& b = game.board();
+        return phase == Phase::Idle && b.count() == 1 && !boardWon();
+    }
+    bool boardWon() const {
+        const Board& b = game.board();
+        for (int i = 0; i < 4; ++i)
+            if (b.present[i]) return b.value[i] == Rational(24);
+        return false;
+    }
 
     // Mouse cursor affordance: plain arrow, hand over a grabbable cell/button,
     // closed/grabbing hand while dragging. (Touch shows no cursor, so this is
@@ -201,6 +236,16 @@ struct App {
         if (!audioUnlocked) { audio.resume(); audioUnlocked = true; }
     }
 
+    void startHint() { hintActive = true; hintT = 0; }
+    void dismissHint() {
+        if (!hintActive) return;
+        hintActive = false;
+        storage::saveFlag("hint_seen", true);
+    }
+    bool overHelp(Vec2 p) const {
+        return length(p - kHelpCenter) <= 26;
+    }
+
     int tileUnder(Vec2 p) const {
         for (int i = 0; i < 4; ++i) {
             if (!game.board().present[i]) continue;
@@ -234,6 +279,11 @@ struct App {
         pointer = p;
         unlockAudio();
         if (phase != Phase::Idle) return;
+        if (overHelp(p)) {  // replay the gesture hint
+            if (hintActive) dismissHint();
+            else startHint();
+            return;
+        }
         if (overUndo(p)) {
             if (game.canUndo()) {
                 game.undo();
@@ -278,6 +328,8 @@ struct App {
             if (res.ok) {
                 save();
                 audio.play(Sound::Meld);
+                haptic(res.won ? 0 : 12);  // win gets its own pattern below
+                dismissHint();  // they've got it — stop teaching
                 mergeSrc = src; mergeDst = dst; mergeSrcValue = oldSrc;
                 mergeStart = dragged; mergeT = 0; pendingWin = res.won;
                 phase = Phase::Merging;
@@ -286,6 +338,7 @@ struct App {
             }
             // illegal (fraction / divide-by-zero): reject with feedback
             audio.play(Sound::Reject);
+            haptic(22, 40, 22);  // double-buzz
             shakeSlot = dst; shakeT = 0;
         }
         // snap the dragged tile back home
@@ -301,6 +354,7 @@ struct App {
         celebrateT = 0;
         countPopT = 0;
         audio.play(Sound::Win);
+        haptic(18, 60, 90);  // celebratory triple pulse
         confetti.clear();
         for (int i = 0; i < 150; ++i) {
             Confetti c;
@@ -328,12 +382,26 @@ struct App {
 
     // --- update ----------------------------------------------------------
     void update(float dt) {
+        clock += dt;
         for (int i = 0; i < 4; ++i) {
             if (popT[i] < 1) popT[i] = SDL_min(1.0f, popT[i] + dt / POP_DUR);
             if (spawnT[i] < 1) spawnT[i] = SDL_min(1.0f, spawnT[i] + dt / SPAWN_DUR);
         }
         if (shakeT < 1) shakeT = SDL_min(1.0f, shakeT + dt / 0.4f);
         if (undoPressT < 1) undoPressT = SDL_min(1.0f, undoPressT + dt / 0.22f);
+
+        // Ease the dead-end nudge in (and back out once recovered).
+        float stuckTarget = isStuck() ? 1.0f : 0.0f;
+        stuckT += (stuckTarget - stuckT) * SDL_min(1.0f, dt * 6.0f);
+
+        // First-run hint: loop the ghost gesture only while the board is idle and
+        // untouched, and fade it out smoothly when dismissed.
+        bool hintVisible = hintActive && phase == Phase::Idle;
+        hintFade += ((hintVisible ? 1.0f : 0.0f) - hintFade) * SDL_min(1.0f, dt * 8.0f);
+        if (hintVisible) {
+            hintT += dt;
+            if (hintT > kHintLoop) hintT -= kHintLoop;
+        }
 
         displayCount += (float(game.successCount()) - displayCount) * SDL_min(1.0f, dt * 9.0f);
         if (countPopT < 1) countPopT = SDL_min(1.0f, countPopT + dt / 0.5f);
@@ -466,6 +534,12 @@ struct App {
         bool on = game.canUndo();
         float press = 0.9f + 0.1f * ease::outBack(saturate(undoPressT));
         float r = 26 * press;
+        // Dead-end nudge: a pulsing halo draws the eye to undo when stuck.
+        if (stuckT > 0.01f && on) {
+            float pulse = 0.5f + 0.5f * std::sin(clock * 5.0f);
+            float grow = (8 + 7 * pulse) * stuckT;
+            rdr.fillCircle(c.x, c.y, r + grow, withAlpha(Color{1.0f, 0.6f, 0.3f, 1}, 0.35f * stuckT));
+        }
         rdr.roundedShadow({c.x - r, c.y - r, 2 * r, 2 * r}, r, withAlpha(SHADOW, on ? 0.8f : 0.4f), 8, {0, 4});
         rdr.fillCircle(c.x, c.y, r, WHITE);
         Color arrow = on ? Color{0.45f, 0.40f, 0.66f, 1} : Color{0.78f, 0.78f, 0.85f, 1};
@@ -514,7 +588,74 @@ struct App {
         drawTiles();
 
         rdr.setOrigin({0, 0});
+        if (hintFade > 0.01f) drawHint();
+        if (stuckT > 0.01f) {
+            // Soft caption low inside the play area: how to get unstuck. Rises
+            // gently into place as the nudge eases in.
+            float rise = (1.0f - stuckT) * 16.0f;
+            Color t = withAlpha(Color{0.45f, 0.40f, 0.66f, 1}, stuckT);
+            float y = FY + FS - 86;
+            rdr.drawText("no moves left", LW / 2, y + rise, 30, t);
+            rdr.drawText("tap undo to back up", LW / 2, y + 30 + rise, 22, withAlpha(t, 0.85f));
+        }
+        drawHelpButton();
         drawConfetti();
+    }
+
+    // Bottom-right "?" that replays the gesture hint.
+    void drawHelpButton() {
+        Vec2 c = kHelpCenter;
+        float r = 18;
+        rdr.fillCircle(c.x, c.y, r, withAlpha(WHITE, 0.85f));
+        Color q = hintActive ? Color{0.55f, 0.45f, 0.85f, 1} : Color{0.6f, 0.6f, 0.7f, 1};
+        rdr.drawText("?", c.x, c.y - 1, 24, q);
+    }
+
+    // Looping ghost gesture: a translucent tile lifts from a cell, slides to a
+    // neighbour, then flicks out toward the x border — teaching drag + flick.
+    void drawHint() {
+        float a = hintFade;
+        // Dim the board a touch so the demo reads clearly.
+        rdr.fillRect({0, 0, LW, LH}, withAlpha(Color{0.20f, 0.18f, 0.36f, 1}, 0.28f * a));
+
+        Vec2 from = slotCenter(0), to = slotCenter(1);
+        Op demoOp = Op::Mul;
+        Vec2 border = zoneCenter(demoOp);
+
+        // Gesture phases within the loop (seconds): lift, drag, flick, hold, fade.
+        float t = hintT;
+        Vec2 pos; float lift = 0; bool flicking = false;
+        if (t < 0.4f) {                     // lift off the source
+            pos = from; lift = ease::outCubic(t / 0.4f);
+        } else if (t < 1.3f) {              // drag to the target
+            pos = lerp(from, to, ease::inOutCubic((t - 0.4f) / 0.9f)); lift = 1;
+        } else if (t < 1.9f) {              // flick toward the operator border
+            float u = ease::inOutCubic((t - 1.3f) / 0.6f);
+            pos = lerp(to, lerp(to, border, 0.55f), u); lift = 1; flicking = u > 0.15f;
+        } else if (t < 2.7f) {              // settle back on target, op chosen
+            float u = saturate((t - 1.9f) / 0.3f);
+            pos = lerp(lerp(to, border, 0.55f), to, ease::outCubic(u)); lift = 1 - 0.5f * u;
+        } else {                            // brief pause before repeating
+            pos = to; lift = 0;
+        }
+
+        // Highlight the operator zone as the flick approaches it.
+        if (flicking) {
+            Color oc = opColor(demoOp);
+            rdr.fillCircle(border.x, border.y, 40, withAlpha(oc, 0.30f * a));
+            drawGlyph(demoOp, border, 44, withAlpha(oc, a));
+        }
+
+        // The ghost tile carries the source number, so it reads as that tile
+        // being dragged. Draw it lifted with a fingertip dot.
+        float scale = 1.0f + 0.12f * lift;
+        long long val = game.board().present[0] ? game.board().value[0].toInt() : 3;
+        drawTile(pos, scale, Rational(val), a, lift, nullptr);
+        rdr.fillCircle(pos.x, pos.y + BOX * 0.28f, 11, withAlpha(Color{0.45f, 0.40f, 0.66f, 1}, a));
+
+        Color cap = withAlpha(Color{0.30f, 0.26f, 0.5f, 1}, a);
+        rdr.drawText("drag a number onto another", LW / 2, FY - 18, 25, cap);
+        rdr.drawText("flick toward + - x / to choose", LW / 2, FY + FS + 30, 23, cap);
     }
 
     void drawZones() {
@@ -538,6 +679,7 @@ struct App {
             if (!game.board().present[i]) continue;
             if (phase == Phase::Dragging && i == dragSrc) continue;
             if (phase == Phase::Rejecting && i == rejectSlot) continue;
+            if (hintActive && phase == Phase::Idle && i == 0) continue;  // ghost stands in for slot 0
             Vec2 c = slotCenter(i);
             if (shakeSlot == i && shakeT < 1) {
                 float k = (1 - shakeT);
@@ -647,6 +789,9 @@ SDL_AppResult SDL_AppInit(void** appstate, int, char**) {
     app->save();
     app->displayCount = (float)app->game.successCount();
     app->resetSpawn();
+    // Show the gesture hint on a first-ever launch (no win yet, flag unset).
+    if (!storage::loadFlag("hint_seen") && app->game.successCount() == 0)
+        app->startHint();
     std::srand((unsigned)SDL_GetTicks());
     app->lastTick = SDL_GetTicks();
     return SDL_APP_CONTINUE;

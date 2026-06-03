@@ -77,7 +77,14 @@ void Game::undo() {
 }
 
 void Game::ensurePlayable() {
-    if (board_.count() <= 1) newPuzzle();
+    // Re-deal only a finished board (solved to a single 24, or somehow empty).
+    // A single non-24 tile is a recoverable dead end — keep it so the player can
+    // undo, rather than silently swapping the puzzle out from under them.
+    if (board_.count() == 0) { newPuzzle(); return; }
+    if (board_.count() == 1) {
+        for (int i = 0; i < 4; ++i)
+            if (board_.present[i] && board_.value[i] == Rational(24)) { newPuzzle(); return; }
+    }
 }
 
 // --- serialization -------------------------------------------------------
