@@ -279,9 +279,16 @@ struct App {
         pointer = p;
         unlockAudio();
         if (phase != Phase::Idle) return;
-        if (overHelp(p)) {  // replay the gesture hint
+        if (overHelp(p)) {  // the ? button toggles the gesture hint
             if (hintActive) dismissHint();
             else startHint();
+            return;
+        }
+        // While the hint is up, the first tap anywhere just dismisses it — new
+        // players instinctively tap to clear the overlay. Consume that tap so it
+        // doesn't also grab a tile.
+        if (hintActive) {
+            dismissHint();
             return;
         }
         if (overUndo(p)) {
@@ -328,7 +335,7 @@ struct App {
             if (res.ok) {
                 save();
                 audio.play(Sound::Meld);
-                haptic(res.won ? 0 : 12);  // win gets its own pattern below
+                haptic(res.won ? 0 : 35);  // win gets its own pattern below; >~30ms so phones actually buzz
                 dismissHint();  // they've got it — stop teaching
                 mergeSrc = src; mergeDst = dst; mergeSrcValue = oldSrc;
                 mergeStart = dragged; mergeT = 0; pendingWin = res.won;
@@ -655,7 +662,26 @@ struct App {
 
         Color cap = withAlpha(Color{0.30f, 0.26f, 0.5f, 1}, a);
         rdr.drawText("drag a number onto another", LW / 2, FY - 18, 25, cap);
-        rdr.drawText("flick toward + - x / to choose", LW / 2, FY + FS + 30, 23, cap);
+        drawHintCaption(FY + FS + 30, a);
+    }
+
+    // "flick toward [+] [-] [x] [/] to choose", with the real operator glyphs
+    // in their board colors so the symbols match what the player sees.
+    void drawHintCaption(float y, float a) {
+        const float h = 23, gsize = 19, slot = 30, pad = 12;
+        Color cap = withAlpha(Color{0.30f, 0.26f, 0.5f, 1}, a);
+        const char* pre = "flick toward";
+        const char* post = "to choose";
+        Op ops[4] = {Op::Add, Op::Sub, Op::Mul, Op::Div};
+        float wPre = rdr.measureText(pre, h).x, wPost = rdr.measureText(post, h).x;
+        float total = wPre + pad + 4 * slot + pad + wPost;
+        float x = LW / 2 - total / 2;
+        rdr.drawText(pre, x + wPre / 2, y, h, cap);
+        x += wPre + pad;
+        for (int i = 0; i < 4; ++i)
+            drawGlyph(ops[i], {x + slot * i + slot / 2, y}, gsize, withAlpha(opColor(ops[i]), a));
+        x += 4 * slot + pad;
+        rdr.drawText(post, x + wPost / 2, y, h, cap);
     }
 
     void drawZones() {
