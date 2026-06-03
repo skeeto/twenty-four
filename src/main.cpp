@@ -335,7 +335,6 @@ struct App {
             if (res.ok) {
                 save();
                 audio.play(Sound::Meld);
-                haptic(res.won ? 0 : 35);  // win gets its own pattern below; >~30ms so phones actually buzz
                 dismissHint();  // they've got it — stop teaching
                 mergeSrc = src; mergeDst = dst; mergeSrcValue = oldSrc;
                 mergeStart = dragged; mergeT = 0; pendingWin = res.won;
@@ -345,7 +344,6 @@ struct App {
             }
             // illegal (fraction / divide-by-zero): reject with feedback
             audio.play(Sound::Reject);
-            haptic(22, 40, 22);  // double-buzz
             shakeSlot = dst; shakeT = 0;
         }
         // snap the dragged tile back home
