@@ -40,7 +40,7 @@ static inline void haptic(int = 0, int = 0, int = 0) {}  // desktop: no haptics
 #endif
 
 #ifndef TF_VERSION
-#define TF_VERSION "1.0.0"
+#define TF_VERSION "1.1.0"
 #endif
 
 using namespace tf;
