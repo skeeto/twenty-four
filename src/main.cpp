@@ -564,7 +564,11 @@ struct App {
         float pop = popScale(countPopT);
         Vec2 c = kScoreCenter;
         drawStar(c, 18 * pop, GOLD);
-        rdr.drawText(std::to_string((int)std::lround(displayCount)), c.x + 50, c.y, 40 * pop, BOX_TEXT);
+        // Left-aligned beside the star so longer counts grow rightward, not into it.
+        std::string txt = std::to_string((int)std::lround(displayCount));
+        float px = 40 * pop;
+        float w = rdr.measureText(txt, px).x;
+        rdr.drawText(txt, c.x + 29 * pop + w / 2, c.y, px, BOX_TEXT);
     }
 
     void draw() {
